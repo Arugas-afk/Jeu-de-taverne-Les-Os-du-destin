@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Les Os du Destin — Taverne de Luxcyros</title>
+<style>
+  :root{
+    --bg0:#0d0906;
+    --bg1:#1a120b;
+    --bg2:#241811;
+    --wood:#2e2015;
+    --parchment:#e8dcc0;
+    --parchment-dim:#c9bb98;
+    --amber:#d9a441;
+    --amber-bright:#f0c674;
+    --ember:#b5432b;
+    --blood:#7a1f1f;
+    --sage:#5b7a52;
+    --shadow:#000000aa;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(ellipse at 20% 0%, #3a2716 0%, transparent 55%),
+      radial-gradient(ellipse at 80% 10%, #2a1c10 0%, transparent 50%),
+      linear-gradient(180deg, var(--bg0), var(--bg1) 40%, var(--bg0));
+    color: var(--parchment);
+    font-family: Georgia, 'Times New Roman', serif;
+    padding: 24px 14px 60px;
+  }
+  .app{ max-width: 980px; margin: 0 auto; }
+
+  header{ text-align:center; margin-bottom: 28px; }
+  .title-block{
+    display:flex; align-items:center; justify-content:center; gap:22px;
+    flex-wrap:wrap;
+  }
+  .title-block .logo{ height:96px; width:auto; flex-shrink:0; filter: drop-shadow(0 0 10px #00000090); }
+  .title-text{ display:flex; flex-direction:column; gap:4px; }
+  .title-text h1{
+    font-size: 2.4rem;
+    letter-spacing: 3px;
+    color: var(--amber-bright);
+    text-shadow: 0 0 18px #00000090, 0 0 30px #d9a44140;
+    margin: 0;
+    font-variant: small-caps;
+  }
+  header p{ color: var(--parchment-dim); margin:0; font-style: italic; letter-spacing:1px; }
+  header .rule-hint{ font-size:.85rem; opacity:.75; margin-top:10px; }
+  .sound-controls{
+    display:flex; align-items:center; justify-content:center; gap:14px;
+    margin-top:14px; flex-wrap:wrap;
+  }
+  .volume-label{
+    display:flex; align-items:center; gap:8px; font-size:.8rem; color: var(--parchment-dim);
+  }
+  .volume-label input[type="range"]{
+    accent-color: var(--amber-bright);
+    width:120px;
+  }
+
+  .panel{
+    background: linear-gradient(180deg, var(--bg2), var(--wood));
+    border: 1px solid #00000080;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 22px;
+    box-shadow: inset 0 0 40px #00000060, 0 6px 18px #00000070;
+  }
+  .panel h2{
+    margin-top:0; color: var(--amber); font-variant: small-caps;
+    letter-spacing: 2px; border-bottom: 1px solid #ffffff20; padding-bottom:8px;
+  }
+  .history-section{ margin-top:18px; padding-top:14px; border-top:1px solid #ffffff20; }
+  .history-section h3{
+    margin:0 0 10px; color: var(--amber-bright); font-variant: small-caps;
+    letter-spacing: 1px; font-size:1rem;
+  }
+
+  /* ---- Setup ---- */
+  .add-row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 14px; }
+  input[type="text"]{
+    flex:1; min-width:160px; padding:10px 12px; border-radius:6px;
+    border:1px solid #00000090; background:#12100c; color: var(--parchment);
+    font-family: inherit; font-size:1rem;
+  }
+  label.check{
+    display:flex; align-items:center; gap:6px; font-size:.85rem; color: var(--parchment-dim);
+    background:#00000030; padding:8px 10px; border-radius:6px; cursor:pointer;
+  }
+  label.check.small{ font-size:.78rem; padding:4px 8px; }
+  label.check select{
+    font-family: inherit; background:#12100c; color: var(--parchment);
+    border:1px solid #00000090; border-radius:4px; padding:2px 6px; margin-left:4px;
+  }
+  button{
+    font-family: inherit; cursor:pointer; border:none; border-radius:6px;
+    padding: 10px 16px; font-size:.95rem; font-weight:bold; letter-spacing: .5px;
+    background: linear-gradient(180deg, var(--amber-bright), var(--amber));
+    color:#1a1206; box-shadow: 0 3px 0 #7a5a1e80, 0 4px 10px #00000060;
+    transition: transform .08s ease;
+  }
+  button:hover{ filter: brightness(1.08); }
+  button:active{ transform: translateY(2px); box-shadow:0 1px 0 #7a5a1e80; }
+  button:disabled{ opacity:.35; cursor:not-allowed; filter:none; }
+  button.secondary{ background: linear-gradient(180deg,#4a4038,#332a24); color: var(--parchment); box-shadow: 0 3px 0 #00000060; }
+  button.small{ padding:5px 10px; font-size:.78rem; }
+
+  .player-setup-list{ display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
+  .player-setup-row{
+    display:flex; align-items:center; gap:12px; background:#00000030;
+    padding:8px 12px; border-radius:6px; border-left:3px solid var(--amber);
+  }
+  .player-setup-row .name{ flex:1; font-size:1.05rem; }
+  .empty-hint{ color: var(--parchment-dim); font-style:italic; opacity:.7; }
+
+  /* ---- Game ---- */
+  .status-bar{
+    display:flex; justify-content:space-between; align-items:center;
+    flex-wrap:wrap; gap:10px; margin-bottom:16px;
+  }
+  .status-bar .round-title{ font-size:1.2rem; color: var(--amber-bright); font-variant: small-caps; letter-spacing:1px;}
+  .controls{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 18px; }
+
+  .players-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr)); gap:16px; }
+  .card{
+    position:relative; background: linear-gradient(160deg, #241a12, #170f09);
+    border:1px solid #00000090; border-radius:10px; padding:14px;
+    box-shadow: inset 0 0 20px #00000060;
+    transition: opacity .25s ease, filter .25s ease;
+  }
+  .card.eliminated{ opacity:.45; filter: grayscale(70%); }
+  .card.winner{ border-color: var(--amber-bright); box-shadow: 0 0 0 1px var(--amber-bright), 0 0 22px #f0c67460; }
+  .card .name-row{ margin-bottom:8px; }
+  .card .name{ font-size:1.1rem; color: var(--amber-bright); display:block; margin-bottom:6px; }
+  .badges-row{ display:flex; flex-wrap:wrap; gap:6px; }
+  .badge{
+    font-size:.68rem; padding:2px 7px; border-radius:20px; font-weight:bold;
+    text-transform:uppercase; letter-spacing:.5px; white-space:nowrap;
+  }
+  .badge.loaded{ background:#4a3a1a; color: var(--amber-bright); }
+  .badge.win{ background: var(--amber-bright); color:#241a12; }
+  .icon-crown{
+    height:1.1em; width:auto; vertical-align:-0.2em;
+    filter: drop-shadow(1px 0 0 #00000090) drop-shadow(-1px 0 0 #00000090)
+            drop-shadow(0 1px 0 #00000090) drop-shadow(0 -1px 0 #00000090);
+  }
+  .badge.out{ background:#3a3a3a; color:#ccc; }
+  .badge.tied{ background: var(--blood); color:#fff0e6; }
+  .badge.set-commun{ background:#4a4438; color: var(--parchment-dim); }
+  .badge.set-luxe{ background:#3a2f12; color: var(--amber-bright); }
+  .badge.set-interdit{ background:#2a0e0e; color:#e8b0a8; }
+
+  .dice-row{ display:flex; gap:8px; justify-content:center; margin: 10px 0; }
+  .die{
+    width:56px; height:56px; border-radius:8px; overflow:hidden;
+    background: var(--parchment);
+    box-shadow: 0 3px 6px #00000070, inset 0 0 0 2px #00000020;
+  }
+  .die img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .die.loaded{ box-shadow: 0 3px 6px #00000070, inset 0 0 0 3px var(--amber-bright); }
+  .die.rolling{ animation: shake .12s linear infinite; }
+  .die.placeholder{
+    display:flex; align-items:center; justify-content:center;
+    font-size:2rem; color:#8a7a5a; background:#241a12; box-shadow:inset 0 0 0 2px #00000060;
+  }
+  @keyframes shake{ 0%{transform:rotate(-6deg);} 50%{transform:rotate(6deg);} 100%{transform:rotate(-6deg);} }
+
+  .total-row{ text-align:center; margin-bottom:8px; }
+  .total-row .total{ font-size:1.4rem; font-weight:bold; }
+  .total-row .parity{ font-size:.78rem; opacity:.8; margin-left:6px;}
+  .even{ color: var(--sage); }
+  .odd{ color: var(--ember); }
+
+  .rp-box{ margin-top:10px; }
+  .rp-text{
+    font-style: italic; font-size:.85rem; background:#00000030; padding:8px;
+    border-radius:6px; border-left:2px solid var(--amber); min-height:20px; white-space:pre-wrap;
+  }
+
+  .log{ display:flex; flex-direction:column; gap:8px; max-height: 340px; overflow-y:auto; padding-right:6px;}
+  .log-entry{
+    background:#00000030; padding:8px 12px; border-radius:6px; font-size:.9rem;
+    border-left: 3px solid var(--amber);
+  }
+  .log-entry.win{ border-left-color: var(--amber-bright); background:#2a220f; }
+  .log-entry.info{ border-left-color:#5b7a52; }
+  .log-entry.warn{ border-left-color: var(--blood); }
+
+  .hidden{ display:none !important; }
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:#4a3a24; border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="title-block">
+      <img class="logo" src="Image/logo_os_destin.png" alt="">
+      <div class="title-text">
+        <h1>Les Os du Destin</h1>
+        <p>Aux Os du Destin, la chance a des dents.</p>
+      </div>
+      <img class="logo" src="Image/logo_os_destin.png" alt="">
+    </div>
+    <p class="rule-hint">Lance trois dés, chasse l'impair, car pour arracher la victoire, il faut des <strong>pairs</strong>.</p>
+    <div class="sound-controls">
+      <button class="secondary small" id="music-toggle">🔈 Musique</button>
+      <label class="volume-label">
+        Volume
+        <input type="range" id="volume-slider" min="0" max="100" value="70">
+      </label>
+    </div>
+    <audio id="bg-music" src="musique_les_os_du_destin.mp3" loop preload="auto"></audio>
+    <audio id="dice-sfx" src="jet_dés.mp3" preload="auto"></audio>
+  </header>
+
+  <!-- SETUP -->
+  <section class="panel" id="setup-panel">
+    <h2>Autour de la table</h2>
+    <div class="add-row">
+      <input type="text" id="player-name-input" placeholder="Nom du joueur..." maxlength="30">
+      <button id="add-player-btn">+ Ajouter</button>
+    </div>
+    <div class="player-setup-list" id="player-setup-list"></div>
+    <div class="controls">
+      <button id="start-game-btn" disabled>Lancer la partie</button>
+      <button class="secondary small" id="clear-players-btn">Vider la table</button>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section class="panel hidden" id="game-panel">
+    <div class="status-bar">
+      <div class="round-title" id="round-title">Manche 1</div>
+      <div class="controls" style="margin:0;">
+        <button id="roll-round-btn">Lancer le tour</button>
+        <button id="resolve-round-btn" disabled>Résoudre le tour</button>
+        <button class="secondary small" id="replay-btn">Relancer (mêmes joueurs)</button>
+        <button class="secondary small" id="back-setup-btn">↺ Retour à la table</button>
+      </div>
+    </div>
+    <div class="players-grid" id="players-grid"></div>
+  </section>
+
+  <!-- LOG -->
+  <section class="panel hidden" id="log-panel">
+    <h2>Chroniques de la partie</h2>
+    <div class="log" id="log"></div>
+    <div class="history-section">
+      <h3>Parties précédentes</h3>
+      <div class="log" id="history-log"></div>
+      <button class="secondary small" id="clear-history-btn" style="margin-top:10px;">Vider l'historique</button>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- State ----------
+  let players = [];        // {id, name, loadedDiceCount, diceSet} — dés pipés possédés (0-3) et set choisi
+  let nextId = 1;
+  let contenders = [];      // ids still in contention this round
+  let statusMap = {};       // id -> 'active' | 'out-odd' | 'out-lower' | 'out-six' | 'winner'
+  let diceState = {};       // id -> {dice:[], loadedFlags:[], rolled:false, rolling:false, rpText:''}
+  let roundNumber = 1;
+  let gameOver = false;
+  let logEntries = [];
+  let gameHistory = [];    // {time, winner, total, sixes, players, rounds}
+
+  const numberWords = {1:'un',2:'deux',3:'trois',4:'quatre',5:'cinq',6:'six'};
+  // Dés pipés : biaisés vers les faces paires (et le 6 en particulier).
+  const LOADED_TABLE = [1,2,2,3,4,4,5,6,6,6];
+
+  // ---------- Helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const rollDie = (loaded) => loaded
+    ? LOADED_TABLE[Math.floor(Math.random()*LOADED_TABLE.length)]
+    : 1 + Math.floor(Math.random()*6);
+  function rollThree(loadedCount){
+    const n = Math.max(0, Math.min(3, loadedCount||0));
+    const flags = [0,1,2].map(i => i < n);
+    for(let i=flags.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [flags[i],flags[j]] = [flags[j],flags[i]];
+    }
+    return { dice: flags.map(rollDie), flags };
+  }
+  const sum = (arr) => arr.reduce((a,b)=>a+b,0);
+  const countSix = (arr) => arr.filter(v=>v===6).length;
+  const isEven = (n) => n % 2 === 0;
+  const playerById = (id) => players.find(p=>p.id===id);
+
+  function addLog(text, type){
+    logEntries.push({text, type: type||'info'});
+    renderLog();
+  }
+
+  // ---------- Setup phase ----------
+  function renderSetup(){
+    const list = $('player-setup-list');
+    if(players.length === 0){
+      list.innerHTML = '<div class="empty-hint">Aucun joueur pour l\'instant. Ajoutez au moins deux téméraires.</div>';
+    } else {
+      list.innerHTML = players.map(p => `
+        <div class="player-setup-row">
+          <span class="name">${escapeHtml(p.name)}</span>
+          <label class="check small">
+            Set de dés :
+            <select data-dice-set="${p.id}">
+              <option value="commun" ${p.diceSet === 'commun' ? 'selected' : ''}>Set commun</option>
+              <option value="luxe" ${p.diceSet === 'luxe' ? 'selected' : ''}>Set de luxe</option>
+              <option value="interdit" ${p.diceSet === 'interdit' ? 'selected' : ''}>Set interdit</option>
+            </select>
+          </label>
+          <label class="check small">
+            Dés pipés possédés (validés par le Garde-Chroniqueur) :
+            <select data-loaded-count="${p.id}">
+              <option value="0" ${p.loadedDiceCount === 0 ? 'selected' : ''}>0</option>
+              <option value="1" ${p.loadedDiceCount === 1 ? 'selected' : ''}>1</option>
+              <option value="2" ${p.loadedDiceCount === 2 ? 'selected' : ''}>2</option>
+              <option value="3" ${p.loadedDiceCount === 3 ? 'selected' : ''}>3</option>
+            </select>
+          </label>
+          <button class="secondary small" data-remove="${p.id}">✕</button>
+        </div>
+      `).join('');
+    }
+    $('start-game-btn').disabled = players.length < 2;
+  }
+
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  $('add-player-btn').addEventListener('click', () => {
+    const input = $('player-name-input');
+    const name = input.value.trim();
+    if(!name) return;
+    players.push({id: nextId++, name, loadedDiceCount: 0, diceSet: 'commun'});
+    input.value = '';
+    renderSetup();
+    input.focus();
+  });
+
+  $('player-name-input').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter'){ $('add-player-btn').click(); }
+  });
+
+  $('player-setup-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-remove]');
+    if(!btn) return;
+    const id = Number(btn.getAttribute('data-remove'));
+    players = players.filter(p=>p.id !== id);
+    renderSetup();
+  });
+
+  $('player-setup-list').addEventListener('change', (e) => {
+    const countSelect = e.target.closest('[data-loaded-count]');
+    if(countSelect){
+      const player = playerById(Number(countSelect.getAttribute('data-loaded-count')));
+      if(player) player.loadedDiceCount = Number(countSelect.value);
+      return;
+    }
+    const setSelect = e.target.closest('[data-dice-set]');
+    if(setSelect){
+      const player = playerById(Number(setSelect.getAttribute('data-dice-set')));
+      if(player) player.diceSet = setSelect.value;
+    }
+  });
+
+  $('clear-players-btn').addEventListener('click', () => {
+    players = [];
+    renderSetup();
+  });
+
+  function beginGame(){
+    contenders = players.map(p=>p.id);
+    statusMap = {};
+    contenders.forEach(id => statusMap[id] = 'active');
+    roundNumber = 1;
+    gameOver = false;
+    logEntries = [];
+    resetRoundDiceState();
+    $('roll-round-btn').disabled = false;
+    $('resolve-round-btn').disabled = true;
+    addLog(`La partie commence autour de la table, ${players.length} joueurs osent tenter leur chance.`, 'info');
+    renderGame();
+  }
+
+  $('start-game-btn').addEventListener('click', () => {
+    $('setup-panel').classList.add('hidden');
+    $('game-panel').classList.remove('hidden');
+    $('log-panel').classList.remove('hidden');
+    beginGame();
+  });
+
+  $('replay-btn').addEventListener('click', () => {
+    beginGame();
+  });
+
+  $('back-setup-btn').addEventListener('click', () => {
+    $('game-panel').classList.add('hidden');
+    $('log-panel').classList.add('hidden');
+    $('setup-panel').classList.remove('hidden');
+    renderSetup();
+  });
+
+  // ---------- Round dice state ----------
+  function resetRoundDiceState(){
+    contenders.forEach(id => {
+      diceState[id] = { dice: [], loadedFlags: [], rolled:false, rolling:false, rpText:'' };
+    });
+  }
+
+  // ---------- Rolling ----------
+  $('roll-round-btn').addEventListener('click', () => {
+    $('roll-round-btn').disabled = true;
+    $('resolve-round-btn').disabled = true;
+    contenders.forEach(id => {
+      statusMap[id] = 'active';
+      diceState[id].rolling = true;
+      diceState[id].dice = [1,1,1];
+    });
+    renderGame();
+    const diceSfx = $('dice-sfx');
+    diceSfx.currentTime = 0;
+    diceSfx.play().catch(() => {});
+
+    let ticks = 0;
+    const interval = setInterval(() => {
+      contenders.forEach(id => {
+        const { dice, flags } = rollThree(playerById(id).loadedDiceCount);
+        diceState[id].dice = dice;
+        diceState[id].loadedFlags = flags;
+      });
+      renderGame(true);
+      ticks++;
+      if(ticks >= 7){
+        clearInterval(interval);
+        contenders.forEach(id => {
+          const { dice, flags } = rollThree(playerById(id).loadedDiceCount);
+          diceState[id].dice = dice;
+          diceState[id].loadedFlags = flags;
+          diceState[id].rolled = true;
+          diceState[id].rolling = false;
+        });
+        $('resolve-round-btn').disabled = false;
+        renderGame();
+      }
+    }, 90);
+  });
+
+  // ---------- Resolution ----------
+  $('resolve-round-btn').addEventListener('click', resolveRound);
+
+  function resolveRound(){
+    const evens = contenders.filter(id => isEven(sum(diceState[id].dice)));
+
+    if(evens.length === 0){
+      addLog(`Aucune somme paire ce tour-ci — le sort hésite encore. On relance les dés pour tout le monde.`, 'warn');
+      resetRoundDiceState();
+      $('roll-round-btn').disabled = false;
+      $('resolve-round-btn').disabled = true;
+      renderGame();
+      return;
+    }
+
+    // odd totals eliminated
+    contenders.filter(id => !evens.includes(id)).forEach(id => {
+      statusMap[id] = 'out-odd';
+      addLog(`${playerById(id).name} obtient ${sum(diceState[id].dice)} (impair) — éliminé.`, 'info');
+    });
+
+    let pool = evens;
+    const maxTotal = Math.max(...pool.map(id => sum(diceState[id].dice)));
+    const atMax = pool.filter(id => sum(diceState[id].dice) === maxTotal);
+    pool.filter(id => !atMax.includes(id)).forEach(id => {
+      statusMap[id] = 'out-lower';
+      addLog(`${playerById(id).name} totalise ${sum(diceState[id].dice)} (pair, mais dépassé) — éliminé.`, 'info');
+    });
+
+    if(atMax.length === 1){
+      return declareWinner(atMax[0]);
+    }
+
+    const maxSix = Math.max(...atMax.map(id => countSix(diceState[id].dice)));
+    const atMaxSix = atMax.filter(id => countSix(diceState[id].dice) === maxSix);
+    atMax.filter(id => !atMaxSix.includes(id)).forEach(id => {
+      statusMap[id] = 'out-six';
+      addLog(`${playerById(id).name} égalise la somme (${maxTotal}) mais avec moins de 6 — éliminé.`, 'info');
+    });
+
+    if(atMaxSix.length === 1){
+      return declareWinner(atMaxSix[0]);
+    }
+
+    // still perfectly tied -> new tie-break round
+    atMaxSix.forEach(id => { statusMap[id] = 'tied'; });
+    contenders = atMaxSix;
+    roundNumber++;
+    resetRoundDiceState();
+    const names = contenders.map(id => playerById(id).name).join(' et ');
+    addLog(`Égalité parfaite (${maxTotal}, ${maxSix} six) entre ${names} ! Manche de départage n°${roundNumber}.`, 'warn');
+    $('roll-round-btn').disabled = false;
+    $('resolve-round-btn').disabled = true;
+    renderGame();
+  }
+
+  function declareWinner(id){
+    statusMap[id] = 'winner';
+    gameOver = true;
+    const p = playerById(id);
+    const ds = diceState[id];
+    addLog(`${p.name} remporte Les Os du Destin avec ${sum(ds.dice)} (${describeDiceGrouped(ds.dice)}) !`, 'win');
+    $('roll-round-btn').disabled = true;
+    $('resolve-round-btn').disabled = true;
+    recordHistory({
+      time: new Date().toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}),
+      winner: p.name,
+      total: sum(ds.dice),
+      sixes: countSix(ds.dice),
+      players: players.length,
+      rounds: roundNumber
+    });
+    renderGame();
+  }
+
+  // ---------- Historique des parties ----------
+  function loadHistory(){
+    try{
+      const raw = localStorage.getItem('osDuDestinHistory');
+      gameHistory = raw ? JSON.parse(raw) : [];
+    } catch(e){ gameHistory = []; }
+  }
+
+  function saveHistory(){
+    try{ localStorage.setItem('osDuDestinHistory', JSON.stringify(gameHistory)); } catch(e){}
+  }
+
+  function recordHistory(entry){
+    gameHistory.unshift(entry);
+    gameHistory = gameHistory.slice(0, 20);
+    saveHistory();
+    renderHistory();
+  }
+
+  function renderHistory(){
+    const el = $('history-log');
+    if(gameHistory.length === 0){
+      el.innerHTML = '<div class="empty-hint">Aucune partie terminée pour l\'instant.</div>';
+      return;
+    }
+    el.innerHTML = gameHistory.map(g => `
+      <div class="log-entry win">
+        <img class="icon-crown" src="Image/couronne_os.png" alt=""> ${escapeHtml(g.winner)} — total ${g.total} (${g.sixes} six) — ${g.players} joueurs, ${g.rounds} manche(s) — ${escapeHtml(g.time)}
+      </div>
+    `).join('');
+  }
+
+  $('clear-history-btn').addEventListener('click', () => {
+    gameHistory = [];
+    saveHistory();
+    renderHistory();
+  });
+
+  // ---------- RP text generator ----------
+  const seqConnectors = ['un {w}', 'puis un {w}', 'puis encore un {w}', 'et enfin un {w}'];
+  const groupAdjectives = ['misérables', 'insolents', 'ricanants', 'usés', 'chanceux', 'sournois'];
+  const openings = [
+    "{name} s'assied à la table, ses doigts frôlant les dés avec une nervosité mal cachée. Il les fait rouler d'un geste sec.",
+    "D'un geste théâtral, {name} lance ses trois dés sur la table poisseuse de la taverne.",
+    "{name} souffle sur ses dés comme pour leur murmurer une prière, puis les jette sans un regard en arrière.",
+    "Sans un mot, {name} fait claquer les dés contre le bois usé de la table, sous les regards des autres joueurs.",
+    "{name} secoue les dés dans son poing fermé, un sourire en coin, avant de les libérer d'un coup sec."
+  ];
+  const rollDescs = [
+    "Les dés tournoient, ricochent contre une chope à moitié vide, puis s'immobilisent un à un.",
+    "Ils roulent bruyamment sur le bois, cognent contre une pièce oubliée, et finissent par se figer.",
+    "Un raclement sourd, puis plus rien : les dés se sont arrêtés au centre de la table.",
+    "Ils rebondissent, hésitent au bord de la table, puis se stabilisent enfin."
+  ];
+  const closings_even = [
+    "Total : {total}. Un chiffre pair — la chance semble, pour l'instant, de son côté.",
+    "Total : {total}. {name} tapote la table du doigt, comme pour remercier le sort.",
+    "Total : {total}. Un sourire discret échappe à {name} — la parité lui sourit."
+  ];
+  const closings_odd = [
+    "Total : {total}. Un chiffre impair. {name} soupire, observant ses compagnons avec dépit.",
+    "Total : {total}. {name} grimace — le sort ne lui est pas favorable ce tour-ci.",
+    "Total : {total}. Un silence gêné suit l'annonce du chiffre impair."
+  ];
+
+  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+  function sequentialDesc(dice){
+    return dice.map((v,i) => seqConnectors[Math.min(i, seqConnectors.length-1)].replace('{w}', numberWords[v])).join(', ');
+  }
+
+  function describeDiceGrouped(dice){
+    const counts = {};
+    dice.forEach(v => counts[v] = (counts[v]||0) + 1);
+    const parts = Object.keys(counts).sort((a,b)=>counts[b]-counts[a]).map(v => {
+      const c = counts[v];
+      if(c === 1) return `un ${numberWords[v]}`;
+      const adj = pick(groupAdjectives);
+      return `${numberWords[c]} ${adj} ${numberWords[v]}`;
+    });
+    return parts.join(', suivi de ');
+  }
+
+  function generateRpText(name, dice){
+    const total = sum(dice);
+    const useGrouped = Math.random() < 0.5;
+    const diceText = useGrouped ? describeDiceGrouped(dice) : sequentialDesc(dice);
+    const closing = isEven(total) ? pick(closings_even) : pick(closings_odd);
+    return [
+      pick(openings).replace('{name}', name),
+      pick(rollDescs),
+      diceText.charAt(0).toUpperCase() + diceText.slice(1) + '.',
+      closing.replace('{total}', total).replace('{name}', name)
+    ].join(' ');
+  }
+
+  // ---------- Render ----------
+  function statusBadge(id){
+    const s = statusMap[id];
+    if(s === 'winner') return '<span class="badge win"><img class="icon-crown" src="Image/couronne_os.png" alt=""> Vainqueur</span>';
+    if(s === 'tied') return '<span class="badge tied">Égalité — départage</span>';
+    if(s === 'out-odd') return '<span class="badge out">Éliminé — impair</span>';
+    if(s === 'out-lower') return '<span class="badge out">Éliminé — somme faible</span>';
+    if(s === 'out-six') return '<span class="badge out">Éliminé — moins de 6</span>';
+    return '';
+  }
+
+  function renderGame(animating){
+    $('round-title').textContent = roundNumber === 1 ? 'Manche 1' : `Manche de départage n°${roundNumber}`;
+
+    $('players-grid').innerHTML = contenders.map(id => {
+      const p = playerById(id);
+      const ds = diceState[id];
+      const eliminated = statusMap[id] && !['active', 'winner', 'tied'].includes(statusMap[id]);
+      const isWinner = statusMap[id] === 'winner';
+      const total = ds.dice.length === 3 ? sum(ds.dice) : null;
+      const parity = total !== null ? (isEven(total) ? '<span class="parity even">(pair)</span>' : '<span class="parity odd">(impair)</span>') : '';
+
+      const diceHtml = (ds.dice.length ? ds.dice : [0,0,0]).map((v, i) => {
+        const cls = ['die'];
+        if(ds.rolling) cls.push('rolling');
+        if(ds.loadedFlags[i]) cls.push('loaded');
+        if(!v){
+          cls.push('placeholder');
+          return `<div class="${cls.join(' ')}">?</div>`;
+        }
+        const variant = ds.loadedFlags[i] ? `pipes-${p.diceSet}` : p.diceSet;
+        const src = `Image/des/les-os-du-destin/os-destin-${variant}-face-${v}.png`;
+        return `<div class="${cls.join(' ')}"><img src="${src}" alt="Face ${v}"></div>`;
+      }).join('');
+
+      const loadedBadge = p.loadedDiceCount > 0
+        ? `<span class="badge loaded">${p.loadedDiceCount} dé(s) pipé(s)</span>`
+        : '';
+      const setLabels = {commun: 'Set commun', luxe: 'Set de luxe', interdit: 'Set interdit'};
+      const setBadge = `<span class="badge set-${p.diceSet}">${setLabels[p.diceSet]}</span>`;
+
+      let rpBlock = '';
+      if(ds.rolled){
+        rpBlock = `
+          <div class="rp-box">
+            <button class="secondary small" data-rp="${id}">📜 Générer le texte RP</button>
+            <div class="rp-text" id="rp-${id}">${ds.rpText ? escapeHtml(ds.rpText) : ''}</div>
+          </div>`;
+      }
+
+      return `
+        <div class="card ${eliminated ? 'eliminated' : ''} ${isWinner ? 'winner' : ''}">
+          <div class="name-row">
+            <span class="name">${escapeHtml(p.name)}</span>
+            <div class="badges-row">${setBadge}${loadedBadge}${statusBadge(id)}</div>
+          </div>
+          <div class="dice-row">${diceHtml}</div>
+          <div class="total-row">
+            ${total !== null ? `<span class="total">Total : ${total}</span> ${parity}` : '<span class="total" style="opacity:.4">— — —</span>'}
+          </div>
+          ${rpBlock}
+        </div>
+      `;
+    }).join('');
+
+    if(!animating) attachCardHandlers();
+  }
+
+  function attachCardHandlers(){
+    document.querySelectorAll('[data-rp]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.getAttribute('data-rp'));
+        const ds = diceState[id];
+        ds.rpText = generateRpText(playerById(id).name, ds.dice);
+        $(`rp-${id}`).textContent = ds.rpText;
+      });
+    });
+  }
+
+  function renderLog(){
+    const log = $('log');
+    const crown = '<img class="icon-crown" src="Image/couronne_os.png" alt=""> ';
+    log.innerHTML = logEntries.map(e => `<div class="log-entry ${e.type}">${e.type === 'win' ? crown : ''}${escapeHtml(e.text)}</div>`).join('');
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // ---------- Musique ----------
+  const bgMusic = $('bg-music');
+  const diceSfxEl = $('dice-sfx');
+  let musicOn = false;
+  let masterVolume = 0.7;
+
+  function loadVolume(){
+    try{
+      const raw = localStorage.getItem('osDuDestinVolume');
+      if(raw !== null) masterVolume = Number(raw);
+    } catch(e){}
+  }
+
+  function applyVolume(){
+    bgMusic.volume = masterVolume;
+    diceSfxEl.volume = masterVolume;
+    $('volume-slider').value = Math.round(masterVolume * 100);
+  }
+
+  $('volume-slider').addEventListener('input', (e) => {
+    masterVolume = Number(e.target.value) / 100;
+    bgMusic.volume = masterVolume;
+    diceSfxEl.volume = masterVolume;
+    try{ localStorage.setItem('osDuDestinVolume', String(masterVolume)); } catch(e){}
+  });
+
+  $('music-toggle').addEventListener('click', () => {
+    musicOn = !musicOn;
+    if(musicOn){
+      bgMusic.play().catch(() => { musicOn = false; $('music-toggle').textContent = '🔈 Musique'; });
+      $('music-toggle').textContent = '🔊 Musique';
+    } else {
+      bgMusic.pause();
+      $('music-toggle').textContent = '🔈 Musique';
+    }
+  });
+
+  // ---------- init ----------
+  loadVolume();
+  applyVolume();
+  loadHistory();
+  renderHistory();
+  renderSetup();
+})();
+</script>
+</body>
+</html>
