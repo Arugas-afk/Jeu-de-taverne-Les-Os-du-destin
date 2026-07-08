@@ -80,7 +80,7 @@
     letter-spacing: 1px; font-size:1rem;
   }
 
-  /* ---- Setup ---- */
+  /* ---- Setup / Room ---- */
   .add-row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom: 14px; }
   input[type="text"]{
     flex:1; min-width:160px; padding:10px 12px; border-radius:6px;
@@ -109,12 +109,21 @@
   button.secondary{ background: linear-gradient(180deg,#4a4038,#332a24); color: var(--parchment); box-shadow: 0 3px 0 #00000060; }
   button.small{ padding:5px 10px; font-size:.78rem; }
 
+  .room-error{ color:#e8a0a0; font-size:.85rem; min-height:1.2em; margin-top:8px; }
+  .room-code-bar{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    background:#00000030; padding:10px 14px; border-radius:6px; margin-bottom:16px;
+  }
+  .room-code-bar strong{ color: var(--amber-bright); letter-spacing:2px; font-size:1.1rem; }
+
   .player-setup-list{ display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
   .player-setup-row{
     display:flex; align-items:center; gap:12px; background:#00000030;
     padding:8px 12px; border-radius:6px; border-left:3px solid var(--amber);
+    flex-wrap:wrap;
   }
-  .player-setup-row .name{ flex:1; font-size:1.05rem; }
+  .player-setup-row.mine{ border-left-color: var(--sage); }
+  .player-setup-row .name{ flex:1; font-size:1.05rem; min-width:100px; }
   .empty-hint{ color: var(--parchment-dim); font-style:italic; opacity:.7; }
 
   /* ---- Game ---- */
@@ -134,8 +143,10 @@
   }
   .card.eliminated{ opacity:.45; filter: grayscale(70%); }
   .card.winner{ border-color: var(--amber-bright); box-shadow: 0 0 0 1px var(--amber-bright), 0 0 22px #f0c67460; }
+  .card.mine{ border-color: var(--sage); box-shadow: 0 0 0 1px var(--sage); }
   .card .name-row{ margin-bottom:8px; }
   .card .name{ font-size:1.1rem; color: var(--amber-bright); display:block; margin-bottom:6px; }
+  .card .name em{ opacity:.6; font-size:.8rem; font-style:italic; }
   .badges-row{ display:flex; flex-wrap:wrap; gap:6px; }
   .badge{
     font-size:.68rem; padding:2px 7px; border-radius:20px; font-weight:bold;
@@ -174,6 +185,8 @@
   .total-row .parity{ font-size:.78rem; opacity:.8; margin-left:6px;}
   .even{ color: var(--sage); }
   .odd{ color: var(--ember); }
+
+  .roll-mine-btn{ width:100%; margin-top:8px; }
 
   .rp-box{ margin-top:10px; }
   .rp-text{
@@ -218,17 +231,34 @@
     <audio id="dice-sfx" src="jet_dés.mp3" preload="auto"></audio>
   </header>
 
-  <!-- SETUP -->
-  <section class="panel" id="setup-panel">
-    <h2>Autour de la table</h2>
+  <!-- ROOM -->
+  <section class="panel" id="room-panel">
+    <h2>Rejoindre la taverne</h2>
+    <p class="rule-hint" style="margin-bottom:14px;">Chacun se connecte avec son propre nom et lance ses propres dés. Crée une partie, ou rejoins celle d'un ami avec son code.</p>
     <div class="add-row">
-      <input type="text" id="player-name-input" placeholder="Nom du joueur..." maxlength="30">
-      <button id="add-player-btn">+ Ajouter</button>
+      <input type="text" id="player-name-input-room" placeholder="Ton nom de personnage..." maxlength="30">
+    </div>
+    <div class="controls">
+      <button id="create-room-btn">Créer une nouvelle partie</button>
+    </div>
+    <div class="add-row" style="margin-top:6px;">
+      <input type="text" id="join-room-input" placeholder="Code de la partie (ex: ABCDE)..." maxlength="8">
+      <button id="join-room-btn">Rejoindre</button>
+    </div>
+    <p class="room-error" id="room-error"></p>
+  </section>
+
+  <!-- SETUP -->
+  <section class="panel hidden" id="setup-panel">
+    <h2>Autour de la table</h2>
+    <div class="room-code-bar">
+      <span>Code de la partie : <strong id="room-code-text">—</strong></span>
+      <button class="secondary small" id="copy-invite-btn">Copier le lien d'invitation</button>
     </div>
     <div class="player-setup-list" id="player-setup-list"></div>
     <div class="controls">
       <button id="start-game-btn" disabled>Lancer la partie</button>
-      <button class="secondary small" id="clear-players-btn">Vider la table</button>
+      <button class="secondary small" id="leave-room-btn">Quitter la partie</button>
     </div>
   </section>
 
@@ -237,7 +267,6 @@
     <div class="status-bar">
       <div class="round-title" id="round-title">Manche 1</div>
       <div class="controls" style="margin:0;">
-        <button id="roll-round-btn">Lancer le tour</button>
         <button id="resolve-round-btn" disabled>Résoudre le tour</button>
         <button class="secondary small" id="replay-btn">Relancer (mêmes joueurs)</button>
         <button class="secondary small" id="back-setup-btn">↺ Retour à la table</button>
@@ -258,24 +287,44 @@
   </section>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <script>
 (function(){
   "use strict";
 
-  // ---------- State ----------
-  let players = [];        // {id, name, loadedDiceCount, diceSet} — dés pipés possédés (0-3) et set choisi
-  let nextId = 1;
-  let contenders = [];      // ids still in contention this round
-  let statusMap = {};       // id -> 'active' | 'out-odd' | 'out-lower' | 'out-six' | 'winner'
-  let diceState = {};       // id -> {dice:[], loadedFlags:[], rolled:false, rolling:false, rpText:''}
+  // ---------- Firebase ----------
+  const firebaseConfig = {
+    apiKey: "AIzaSyDuX3aJPQ2FuEt-fTPTHp3s4EyXazKxvg4",
+    authDomain: "les-os-du-destin.firebaseapp.com",
+    databaseURL: "https://les-os-du-destin-default-rtdb.firebaseio.com",
+    projectId: "les-os-du-destin",
+    storageBucket: "les-os-du-destin.firebasestorage.app",
+    messagingSenderId: "899033916812",
+    appId: "1:899033916812:web:618e25d6c892bbd751e2a9"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // ---------- Shared state (mirror of the room in Firebase) ----------
+  let roomId = null;
+  let myPlayerId = null;
+  let roomRef = null;
+  let phase = 'setup';       // 'setup' | 'playing'
+  let players = [];          // [{id, name, loadedDiceCount, diceSet}]
+  let contenders = [];        // ids still in contention this round
+  let statusMap = {};         // id -> 'active' | 'tied' | 'out-odd' | 'out-lower' | 'out-six' | 'winner'
+  let diceState = {};         // id -> {dice:[], loadedFlags:[], rolled:false, rolling:false}
   let roundNumber = 1;
   let gameOver = false;
   let logEntries = [];
-  let gameHistory = [];    // {time, winner, total, sixes, players, rounds}
+  let localRpTexts = {};      // id -> texte RP généré (purement local, jamais synchronisé)
+  let gameHistory = [];       // {time, winner, total, sixes, players, rounds} — local par navigateur
 
   const numberWords = {1:'un',2:'deux',3:'trois',4:'quatre',5:'cinq',6:'six'};
   // Dés pipés : biaisés vers les faces paires (et le 6 en particulier).
   const LOADED_TABLE = [1,2,2,3,4,4,5,6,6,6];
+  const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
   // ---------- Helpers ----------
   const $ = (id) => document.getElementById(id);
@@ -295,231 +344,326 @@
   const countSix = (arr) => arr.filter(v=>v===6).length;
   const isEven = (n) => n % 2 === 0;
   const playerById = (id) => players.find(p=>p.id===id);
-
-  function addLog(text, type){
-    logEntries.push({text, type: type||'info'});
-    renderLog();
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function generateRoomCode(){
+    let code = '';
+    for(let i=0;i<5;i++) code += ROOM_CODE_CHARS[Math.floor(Math.random()*ROOM_CODE_CHARS.length)];
+    return code;
+  }
+  function generatePlayerId(){
+    return 'p' + Math.random().toString(36).slice(2, 10);
+  }
+  function showRoomError(msg){
+    $('room-error').textContent = msg;
   }
 
-  // ---------- Setup phase ----------
+  // ---------- Room: create / join ----------
+  $('create-room-btn').addEventListener('click', () => {
+    const name = $('player-name-input-room').value.trim();
+    if(!name){ showRoomError('Entre ton nom avant de créer une partie.'); return; }
+    attemptCreateRoom(name, 0);
+  });
+
+  function attemptCreateRoom(name, attempt){
+    const code = generateRoomCode();
+    const ref = db.ref('rooms/' + code);
+    ref.once('value').then(snap => {
+      if(snap.exists()){
+        if(attempt < 5) return attemptCreateRoom(name, attempt + 1);
+        showRoomError("Impossible de créer une partie pour l'instant, réessaie.");
+        return;
+      }
+      myPlayerId = generatePlayerId();
+      ref.set({
+        createdAt: firebase.database.ServerValue.TIMESTAMP,
+        phase: 'setup',
+        players: { [myPlayerId]: { name, loadedDiceCount: 0, diceSet: 'commun' } },
+        contenders: {},
+        statusMap: {},
+        diceState: {},
+        roundNumber: 1,
+        gameOver: false,
+        logEntries: []
+      }).then(() => {
+        roomId = code;
+        roomRef = ref;
+        sessionStorage.setItem('osDuDestinPlayerId_' + roomId, myPlayerId);
+        history.replaceState(null, '', location.pathname + '?room=' + roomId);
+        attachRoomListener();
+      });
+    }).catch(() => showRoomError("Connexion à Firebase impossible. Vérifie ta connexion."));
+  }
+
+  $('join-room-btn').addEventListener('click', () => {
+    const name = $('player-name-input-room').value.trim();
+    const code = $('join-room-input').value.trim().toUpperCase();
+    if(!name){ showRoomError('Entre ton nom avant de rejoindre.'); return; }
+    if(!code){ showRoomError('Entre le code de la partie.'); return; }
+    joinRoom(code, name);
+  });
+
+  function joinRoom(code, name){
+    const ref = db.ref('rooms/' + code);
+    ref.once('value').then(snap => {
+      if(!snap.exists()){ showRoomError('Aucune partie trouvée avec ce code.'); return; }
+      myPlayerId = generatePlayerId();
+      ref.child('players/' + myPlayerId).set({ name, loadedDiceCount: 0, diceSet: 'commun' }).then(() => {
+        roomId = code;
+        roomRef = ref;
+        sessionStorage.setItem('osDuDestinPlayerId_' + roomId, myPlayerId);
+        history.replaceState(null, '', location.pathname + '?room=' + roomId);
+        attachRoomListener();
+      });
+    }).catch(() => showRoomError("Connexion à Firebase impossible. Vérifie ta connexion."));
+  }
+
+  function attachRoomListener(){
+    $('room-panel').classList.add('hidden');
+    roomRef.on('value', snap => applySnapshot(snap.val()));
+  }
+
+  $('leave-room-btn').addEventListener('click', () => {
+    if(roomRef && myPlayerId) roomRef.child('players/' + myPlayerId).remove();
+    if(roomId) sessionStorage.removeItem('osDuDestinPlayerId_' + roomId);
+    location.href = location.pathname;
+  });
+
+  $('copy-invite-btn').addEventListener('click', () => {
+    const url = location.origin + location.pathname + '?room=' + roomId;
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(() => {
+        const btn = $('copy-invite-btn');
+        btn.textContent = 'Copié !';
+        setTimeout(() => { btn.textContent = "Copier le lien d'invitation"; }, 2000);
+      }).catch(() => { prompt('Copie ce lien :', url); });
+    } else {
+      prompt('Copie ce lien :', url);
+    }
+  });
+
+  // Rejoindre automatiquement si l'URL contient ?room=CODE et qu'on a déjà une identité connue
+  (function tryAutoRejoin(){
+    const urlRoom = new URLSearchParams(location.search).get('room');
+    if(!urlRoom) return;
+    const code = urlRoom.toUpperCase();
+    $('join-room-input').value = code;
+    const saved = sessionStorage.getItem('osDuDestinPlayerId_' + code);
+    if(!saved) return;
+    const ref = db.ref('rooms/' + code);
+    ref.once('value').then(snap => {
+      const val = snap.val();
+      if(val && val.players && val.players[saved]){
+        roomId = code;
+        myPlayerId = saved;
+        roomRef = ref;
+        attachRoomListener();
+      }
+    }).catch(() => {});
+  })();
+
+  // ---------- Applique l'état reçu de Firebase et redessine tout ----------
+  function applySnapshot(val){
+    if(!val) return;
+    phase = val.phase || 'setup';
+    players = val.players ? Object.keys(val.players).map(id => ({ id, ...val.players[id] })) : [];
+    contenders = val.contenders ? Object.keys(val.contenders) : [];
+    statusMap = val.statusMap || {};
+    diceState = val.diceState || {};
+    contenders.forEach(id => {
+      if(!diceState[id]) diceState[id] = { dice: [], loadedFlags: [], rolled:false, rolling:false };
+      if(!diceState[id].dice) diceState[id].dice = [];
+      if(!diceState[id].loadedFlags) diceState[id].loadedFlags = [];
+    });
+    roundNumber = val.roundNumber || 1;
+    gameOver = !!val.gameOver;
+    logEntries = Array.isArray(val.logEntries) ? val.logEntries : [];
+    renderAll();
+  }
+
+  function renderAll(){
+    if(phase === 'setup'){
+      $('setup-panel').classList.remove('hidden');
+      $('game-panel').classList.add('hidden');
+      $('log-panel').classList.add('hidden');
+      $('room-code-text').textContent = roomId;
+      renderSetup();
+    } else {
+      $('setup-panel').classList.add('hidden');
+      $('game-panel').classList.remove('hidden');
+      $('log-panel').classList.remove('hidden');
+      renderGame();
+      renderLog();
+    }
+  }
+
+  // ---------- Setup phase (roster partagé) ----------
   function renderSetup(){
     const list = $('player-setup-list');
     if(players.length === 0){
-      list.innerHTML = '<div class="empty-hint">Aucun joueur pour l\'instant. Ajoutez au moins deux téméraires.</div>';
+      list.innerHTML = '<div class="empty-hint">En attente de joueurs...</div>';
     } else {
-      list.innerHTML = players.map(p => `
-        <div class="player-setup-row">
-          <span class="name">${escapeHtml(p.name)}</span>
-          <label class="check small">
-            Set de dés :
+      const setLabels = {commun: 'Set commun', luxe: 'Set de luxe', interdit: 'Set interdit'};
+      list.innerHTML = players.map(p => {
+        const mine = p.id === myPlayerId;
+        const setControl = mine ? `
             <select data-dice-set="${p.id}">
               <option value="commun" ${p.diceSet === 'commun' ? 'selected' : ''}>Set commun</option>
               <option value="luxe" ${p.diceSet === 'luxe' ? 'selected' : ''}>Set de luxe</option>
               <option value="interdit" ${p.diceSet === 'interdit' ? 'selected' : ''}>Set interdit</option>
-            </select>
-          </label>
-          <label class="check small">
-            Dés pipés possédés (validés par le Garde-Chroniqueur) :
+            </select>`
+          : `<span class="badge set-${p.diceSet}">${setLabels[p.diceSet]}</span>`;
+        const loadedControl = mine ? `
             <select data-loaded-count="${p.id}">
               <option value="0" ${p.loadedDiceCount === 0 ? 'selected' : ''}>0</option>
               <option value="1" ${p.loadedDiceCount === 1 ? 'selected' : ''}>1</option>
               <option value="2" ${p.loadedDiceCount === 2 ? 'selected' : ''}>2</option>
               <option value="3" ${p.loadedDiceCount === 3 ? 'selected' : ''}>3</option>
-            </select>
-          </label>
-          <button class="secondary small" data-remove="${p.id}">✕</button>
-        </div>
-      `).join('');
+            </select>`
+          : (p.loadedDiceCount > 0 ? `<span class="badge loaded">${p.loadedDiceCount} dé(s) pipé(s)</span>` : '');
+        return `
+          <div class="player-setup-row ${mine ? 'mine' : ''}">
+            <span class="name">${escapeHtml(p.name)}${mine ? ' <em>(toi)</em>' : ''}</span>
+            <label class="check small">Set de dés : ${setControl}</label>
+            <label class="check small">Dés pipés : ${loadedControl}</label>
+          </div>
+        `;
+      }).join('');
     }
     $('start-game-btn').disabled = players.length < 2;
   }
 
-  function escapeHtml(s){
-    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
-
-  $('add-player-btn').addEventListener('click', () => {
-    const input = $('player-name-input');
-    const name = input.value.trim();
-    if(!name) return;
-    players.push({id: nextId++, name, loadedDiceCount: 0, diceSet: 'commun'});
-    input.value = '';
-    renderSetup();
-    input.focus();
-  });
-
-  $('player-name-input').addEventListener('keydown', (e) => {
-    if(e.key === 'Enter'){ $('add-player-btn').click(); }
-  });
-
-  $('player-setup-list').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-remove]');
-    if(!btn) return;
-    const id = Number(btn.getAttribute('data-remove'));
-    players = players.filter(p=>p.id !== id);
-    renderSetup();
-  });
-
   $('player-setup-list').addEventListener('change', (e) => {
     const countSelect = e.target.closest('[data-loaded-count]');
     if(countSelect){
-      const player = playerById(Number(countSelect.getAttribute('data-loaded-count')));
-      if(player) player.loadedDiceCount = Number(countSelect.value);
+      const id = countSelect.getAttribute('data-loaded-count');
+      if(id !== myPlayerId) return;
+      roomRef.child('players/' + id + '/loadedDiceCount').set(Number(countSelect.value));
       return;
     }
     const setSelect = e.target.closest('[data-dice-set]');
     if(setSelect){
-      const player = playerById(Number(setSelect.getAttribute('data-dice-set')));
-      if(player) player.diceSet = setSelect.value;
+      const id = setSelect.getAttribute('data-dice-set');
+      if(id !== myPlayerId) return;
+      roomRef.child('players/' + id + '/diceSet').set(setSelect.value);
     }
   });
 
-  $('clear-players-btn').addEventListener('click', () => {
-    players = [];
-    renderSetup();
-  });
-
   function beginGame(){
-    contenders = players.map(p=>p.id);
-    statusMap = {};
-    contenders.forEach(id => statusMap[id] = 'active');
-    roundNumber = 1;
-    gameOver = false;
-    logEntries = [];
-    resetRoundDiceState();
-    $('roll-round-btn').disabled = false;
-    $('resolve-round-btn').disabled = true;
-    addLog(`La partie commence autour de la table, ${players.length} joueurs osent tenter leur chance.`, 'info');
-    renderGame();
+    const ids = players.map(p => p.id);
+    const newStatusMap = {}; ids.forEach(id => newStatusMap[id] = 'active');
+    const newDiceState = {}; ids.forEach(id => newDiceState[id] = { dice: [], loadedFlags: [], rolled:false, rolling:false });
+    const newContenders = {}; ids.forEach(id => newContenders[id] = true);
+    localRpTexts = {};
+    roomRef.update({
+      phase: 'playing',
+      contenders: newContenders,
+      statusMap: newStatusMap,
+      diceState: newDiceState,
+      roundNumber: 1,
+      gameOver: false,
+      logEntries: [{ text: `La partie commence autour de la table, ${players.length} joueurs osent tenter leur chance.`, type: 'info' }]
+    });
   }
-
-  $('start-game-btn').addEventListener('click', () => {
-    $('setup-panel').classList.add('hidden');
-    $('game-panel').classList.remove('hidden');
-    $('log-panel').classList.remove('hidden');
-    beginGame();
-  });
-
-  $('replay-btn').addEventListener('click', () => {
-    beginGame();
-  });
+  $('start-game-btn').addEventListener('click', beginGame);
+  $('replay-btn').addEventListener('click', beginGame);
 
   $('back-setup-btn').addEventListener('click', () => {
-    $('game-panel').classList.add('hidden');
-    $('log-panel').classList.add('hidden');
-    $('setup-panel').classList.remove('hidden');
-    renderSetup();
+    roomRef.child('phase').set('setup');
   });
 
-  // ---------- Round dice state ----------
-  function resetRoundDiceState(){
-    contenders.forEach(id => {
-      diceState[id] = { dice: [], loadedFlags: [], rolled:false, rolling:false, rpText:'' };
-    });
-  }
-
-  // ---------- Rolling ----------
-  $('roll-round-btn').addEventListener('click', () => {
-    $('roll-round-btn').disabled = true;
-    $('resolve-round-btn').disabled = true;
-    contenders.forEach(id => {
-      statusMap[id] = 'active';
-      diceState[id].rolling = true;
-      diceState[id].dice = [1,1,1];
-    });
-    renderGame();
+  // ---------- Rolling (chacun lance ses propres dés) ----------
+  function rollMyDice(id){
+    const player = playerById(id);
+    if(!player) return;
     const diceSfx = $('dice-sfx');
     diceSfx.currentTime = 0;
     diceSfx.play().catch(() => {});
+    roomRef.child('diceState/' + id).update({ rolling: true, dice: [1,1,1], loadedFlags: [] });
 
     let ticks = 0;
     const interval = setInterval(() => {
-      contenders.forEach(id => {
-        const { dice, flags } = rollThree(playerById(id).loadedDiceCount);
-        diceState[id].dice = dice;
-        diceState[id].loadedFlags = flags;
-      });
-      renderGame(true);
+      const { dice, flags } = rollThree(player.loadedDiceCount);
+      roomRef.child('diceState/' + id).update({ dice, loadedFlags: flags });
       ticks++;
       if(ticks >= 7){
         clearInterval(interval);
-        contenders.forEach(id => {
-          const { dice, flags } = rollThree(playerById(id).loadedDiceCount);
-          diceState[id].dice = dice;
-          diceState[id].loadedFlags = flags;
-          diceState[id].rolled = true;
-          diceState[id].rolling = false;
-        });
-        $('resolve-round-btn').disabled = false;
-        renderGame();
+        const final = rollThree(player.loadedDiceCount);
+        roomRef.child('diceState/' + id).update({ dice: final.dice, loadedFlags: final.flags, rolled: true, rolling: false });
       }
     }, 90);
-  });
+  }
 
   // ---------- Resolution ----------
   $('resolve-round-btn').addEventListener('click', resolveRound);
 
   function resolveRound(){
+    const updates = {};
+    const log = logEntries.slice();
     const evens = contenders.filter(id => isEven(sum(diceState[id].dice)));
 
     if(evens.length === 0){
-      addLog(`Aucune somme paire ce tour-ci — le sort hésite encore. On relance les dés pour tout le monde.`, 'warn');
-      resetRoundDiceState();
-      $('roll-round-btn').disabled = false;
-      $('resolve-round-btn').disabled = true;
-      renderGame();
+      log.push({ text: `Aucune somme paire ce tour-ci — le sort hésite encore. On relance les dés pour tout le monde.`, type: 'warn' });
+      contenders.forEach(id => { updates['diceState/' + id] = { dice: [], loadedFlags: [], rolled:false, rolling:false }; });
+      updates['logEntries'] = log;
+      roomRef.update(updates);
       return;
     }
 
-    // odd totals eliminated
     contenders.filter(id => !evens.includes(id)).forEach(id => {
-      statusMap[id] = 'out-odd';
-      addLog(`${playerById(id).name} obtient ${sum(diceState[id].dice)} (impair) — éliminé.`, 'info');
+      updates['statusMap/' + id] = 'out-odd';
+      log.push({ text: `${playerById(id).name} obtient ${sum(diceState[id].dice)} (impair) — éliminé.`, type: 'info' });
     });
 
-    let pool = evens;
+    const pool = evens;
     const maxTotal = Math.max(...pool.map(id => sum(diceState[id].dice)));
     const atMax = pool.filter(id => sum(diceState[id].dice) === maxTotal);
     pool.filter(id => !atMax.includes(id)).forEach(id => {
-      statusMap[id] = 'out-lower';
-      addLog(`${playerById(id).name} totalise ${sum(diceState[id].dice)} (pair, mais dépassé) — éliminé.`, 'info');
+      updates['statusMap/' + id] = 'out-lower';
+      log.push({ text: `${playerById(id).name} totalise ${sum(diceState[id].dice)} (pair, mais dépassé) — éliminé.`, type: 'info' });
     });
 
     if(atMax.length === 1){
-      return declareWinner(atMax[0]);
+      finalizeWinner(atMax[0], updates, log);
+      return;
     }
 
     const maxSix = Math.max(...atMax.map(id => countSix(diceState[id].dice)));
     const atMaxSix = atMax.filter(id => countSix(diceState[id].dice) === maxSix);
     atMax.filter(id => !atMaxSix.includes(id)).forEach(id => {
-      statusMap[id] = 'out-six';
-      addLog(`${playerById(id).name} égalise la somme (${maxTotal}) mais avec moins de 6 — éliminé.`, 'info');
+      updates['statusMap/' + id] = 'out-six';
+      log.push({ text: `${playerById(id).name} égalise la somme (${maxTotal}) mais avec moins de 6 — éliminé.`, type: 'info' });
     });
 
     if(atMaxSix.length === 1){
-      return declareWinner(atMaxSix[0]);
+      finalizeWinner(atMaxSix[0], updates, log);
+      return;
     }
 
-    // still perfectly tied -> new tie-break round
-    atMaxSix.forEach(id => { statusMap[id] = 'tied'; });
-    contenders = atMaxSix;
-    roundNumber++;
-    resetRoundDiceState();
-    const names = contenders.map(id => playerById(id).name).join(' et ');
-    addLog(`Égalité parfaite (${maxTotal}, ${maxSix} six) entre ${names} ! Manche de départage n°${roundNumber}.`, 'warn');
-    $('roll-round-btn').disabled = false;
-    $('resolve-round-btn').disabled = true;
-    renderGame();
+    // égalité parfaite -> nouvelle manche de départage
+    const newContenders = {};
+    atMaxSix.forEach(id => {
+      updates['statusMap/' + id] = 'tied';
+      updates['diceState/' + id] = { dice: [], loadedFlags: [], rolled:false, rolling:false };
+      newContenders[id] = true;
+    });
+    updates['contenders'] = newContenders;
+    updates['roundNumber'] = roundNumber + 1;
+    const names = atMaxSix.map(id => playerById(id).name).join(' et ');
+    log.push({ text: `Égalité parfaite (${maxTotal}, ${maxSix} six) entre ${names} ! Manche de départage n°${roundNumber + 1}.`, type: 'warn' });
+    updates['logEntries'] = log;
+    roomRef.update(updates);
   }
 
-  function declareWinner(id){
-    statusMap[id] = 'winner';
-    gameOver = true;
+  function finalizeWinner(id, updates, log){
+    updates['statusMap/' + id] = 'winner';
+    updates['gameOver'] = true;
     const p = playerById(id);
     const ds = diceState[id];
-    addLog(`${p.name} remporte Les Os du Destin avec ${sum(ds.dice)} (${describeDiceGrouped(ds.dice)}) !`, 'win');
-    $('roll-round-btn').disabled = true;
-    $('resolve-round-btn').disabled = true;
+    log.push({ text: `${p.name} remporte Les Os du Destin avec ${sum(ds.dice)} (${describeDiceGrouped(ds.dice)}) !`, type: 'win' });
+    updates['logEntries'] = log;
+    roomRef.update(updates);
     recordHistory({
       time: new Date().toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}),
       winner: p.name,
@@ -528,10 +672,9 @@
       players: players.length,
       rounds: roundNumber
     });
-    renderGame();
   }
 
-  // ---------- Historique des parties ----------
+  // ---------- Historique des parties (local, par navigateur) ----------
   function loadHistory(){
     try{
       const raw = localStorage.getItem('osDuDestinHistory');
@@ -627,7 +770,7 @@
     ].join(' ');
   }
 
-  // ---------- Render ----------
+  // ---------- Render (jeu) ----------
   function statusBadge(id){
     const s = statusMap[id];
     if(s === 'winner') return '<span class="badge win"><img class="icon-crown" src="Image/couronne_os.png" alt=""> Vainqueur</span>';
@@ -643,9 +786,11 @@
 
     $('players-grid').innerHTML = contenders.map(id => {
       const p = playerById(id);
-      const ds = diceState[id];
+      if(!p) return '';
+      const ds = diceState[id] || { dice: [], loadedFlags: [], rolled:false, rolling:false };
       const eliminated = statusMap[id] && !['active', 'winner', 'tied'].includes(statusMap[id]);
       const isWinner = statusMap[id] === 'winner';
+      const mine = id === myPlayerId;
       const total = ds.dice.length === 3 ? sum(ds.dice) : null;
       const parity = total !== null ? (isEven(total) ? '<span class="parity even">(pair)</span>' : '<span class="parity odd">(impair)</span>') : '';
 
@@ -668,29 +813,38 @@
       const setLabels = {commun: 'Set commun', luxe: 'Set de luxe', interdit: 'Set interdit'};
       const setBadge = `<span class="badge set-${p.diceSet}">${setLabels[p.diceSet]}</span>`;
 
+      let rollBlock = '';
+      if(mine && !eliminated && !isWinner && !ds.rolled && !ds.rolling){
+        rollBlock = `<button class="roll-mine-btn" data-roll="${id}">Lancer mes dés</button>`;
+      }
+
       let rpBlock = '';
       if(ds.rolled){
         rpBlock = `
           <div class="rp-box">
             <button class="secondary small" data-rp="${id}">📜 Générer le texte RP</button>
-            <div class="rp-text" id="rp-${id}">${ds.rpText ? escapeHtml(ds.rpText) : ''}</div>
+            <div class="rp-text" id="rp-${id}">${localRpTexts[id] ? escapeHtml(localRpTexts[id]) : ''}</div>
           </div>`;
       }
 
       return `
-        <div class="card ${eliminated ? 'eliminated' : ''} ${isWinner ? 'winner' : ''}">
+        <div class="card ${eliminated ? 'eliminated' : ''} ${isWinner ? 'winner' : ''} ${mine ? 'mine' : ''}">
           <div class="name-row">
-            <span class="name">${escapeHtml(p.name)}</span>
+            <span class="name">${escapeHtml(p.name)}${mine ? ' <em>(toi)</em>' : ''}</span>
             <div class="badges-row">${setBadge}${loadedBadge}${statusBadge(id)}</div>
           </div>
           <div class="dice-row">${diceHtml}</div>
           <div class="total-row">
             ${total !== null ? `<span class="total">Total : ${total}</span> ${parity}` : '<span class="total" style="opacity:.4">— — —</span>'}
           </div>
+          ${rollBlock}
           ${rpBlock}
         </div>
       `;
     }).join('');
+
+    const allRolled = contenders.length > 0 && contenders.every(id => diceState[id] && diceState[id].rolled);
+    $('resolve-round-btn').disabled = gameOver || !allRolled;
 
     if(!animating) attachCardHandlers();
   }
@@ -698,11 +852,13 @@
   function attachCardHandlers(){
     document.querySelectorAll('[data-rp]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const id = Number(btn.getAttribute('data-rp'));
-        const ds = diceState[id];
-        ds.rpText = generateRpText(playerById(id).name, ds.dice);
-        $(`rp-${id}`).textContent = ds.rpText;
+        const id = btn.getAttribute('data-rp');
+        localRpTexts[id] = generateRpText(playerById(id).name, diceState[id].dice);
+        $(`rp-${id}`).textContent = localRpTexts[id];
       });
+    });
+    document.querySelectorAll('[data-roll]').forEach(btn => {
+      btn.addEventListener('click', () => rollMyDice(btn.getAttribute('data-roll')));
     });
   }
 
@@ -755,7 +911,6 @@
   applyVolume();
   loadHistory();
   renderHistory();
-  renderSetup();
 })();
 </script>
 </body>
