@@ -246,14 +246,21 @@
       <button id="join-room-btn">Rejoindre</button>
     </div>
     <p class="room-error" id="room-error"></p>
+    <div class="controls" style="margin-top:18px; padding-top:16px; border-top:1px solid #ffffff20;">
+      <button class="secondary small" id="solo-mode-btn">Jouer en solo (gérer toute la table)</button>
+    </div>
   </section>
 
   <!-- SETUP -->
   <section class="panel hidden" id="setup-panel">
     <h2>Autour de la table</h2>
-    <div class="room-code-bar">
+    <div class="room-code-bar" id="room-code-bar">
       <span>Code de la partie : <strong id="room-code-text">—</strong></span>
       <button class="secondary small" id="copy-invite-btn">Copier le lien d'invitation</button>
+    </div>
+    <div class="add-row hidden" id="solo-add-row">
+      <input type="text" id="solo-player-name-input" placeholder="Nom du personnage..." maxlength="30">
+      <button id="solo-add-player-btn">+ Ajouter</button>
     </div>
     <div class="player-setup-list" id="player-setup-list"></div>
     <div class="controls">
@@ -267,6 +274,7 @@
     <div class="status-bar">
       <div class="round-title" id="round-title">Manche 1</div>
       <div class="controls" style="margin:0;">
+        <button id="roll-round-btn" class="hidden">Lancer le tour</button>
         <button id="resolve-round-btn" disabled>Résoudre le tour</button>
         <button class="secondary small" id="replay-btn">Relancer (mêmes joueurs)</button>
         <button class="secondary small" id="back-setup-btn">↺ Retour à la table</button>
@@ -306,7 +314,8 @@
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
 
-  // ---------- Shared state (mirror of the room in Firebase) ----------
+  // ---------- Shared state (mirror of the room in Firebase, or local in solo mode) ----------
+  let mode = null;            // 'solo' | 'multi'
   let roomId = null;
   let myPlayerId = null;
   let roomRef = null;
@@ -359,6 +368,71 @@
     $('room-error').textContent = msg;
   }
 
+  // ---------- Mutation helpers (routent vers Firebase en multi, ou l'etat local en solo) ----------
+  function applyTopLevel(key, value){
+    if(key === 'phase') phase = value;
+    else if(key === 'roundNumber') roundNumber = value;
+    else if(key === 'gameOver') gameOver = !!value;
+    else if(key === 'logEntries') logEntries = Array.isArray(value) ? value : [];
+    else if(key === 'contenders') contenders = value ? Object.keys(value) : [];
+    else if(key === 'players') players = value ? Object.keys(value).map(id => ({ id, ...value[id] })) : [];
+    else if(key === 'statusMap') statusMap = value || {};
+    else if(key === 'diceState'){
+      diceState = value || {};
+      Object.keys(diceState).forEach(id => {
+        if(!diceState[id].dice) diceState[id].dice = [];
+        if(!diceState[id].loadedFlags) diceState[id].loadedFlags = [];
+      });
+    }
+  }
+
+  function applyNested(container, id, value){
+    if(container === 'statusMap'){
+      statusMap[id] = value;
+    } else if(container === 'diceState'){
+      diceState[id] = value;
+      if(!diceState[id].dice) diceState[id].dice = [];
+      if(!diceState[id].loadedFlags) diceState[id].loadedFlags = [];
+    }
+  }
+
+  function applyLocalUpdate(updates){
+    Object.keys(updates).forEach(path => {
+      const parts = path.split('/');
+      if(parts.length === 1){
+        applyTopLevel(parts[0], updates[path]);
+      } else if(parts.length === 2){
+        applyNested(parts[0], parts[1], updates[path]);
+      } else if(parts.length === 3 && parts[0] === 'players'){
+        const player = players.find(p => p.id === parts[1]);
+        if(player) player[parts[2]] = updates[path];
+      }
+    });
+    renderAll();
+  }
+
+  function pushField(path, value){
+    if(mode === 'multi') roomRef.child(path).set(value);
+    else applyLocalUpdate({ [path]: value });
+  }
+
+  function pushMerge(path, partial){
+    if(mode === 'multi'){
+      roomRef.child(path).update(partial);
+    } else {
+      const parts = path.split('/');
+      if(parts[0] === 'diceState'){
+        diceState[parts[1]] = Object.assign({}, diceState[parts[1]], partial);
+      }
+      renderAll();
+    }
+  }
+
+  function pushUpdate(updates){
+    if(mode === 'multi') roomRef.update(updates);
+    else applyLocalUpdate(updates);
+  }
+
   // ---------- Room: create / join ----------
   $('create-room-btn').addEventListener('click', () => {
     const name = $('player-name-input-room').value.trim();
@@ -387,6 +461,7 @@
         gameOver: false,
         logEntries: []
       }).then(() => {
+        mode = 'multi';
         roomId = code;
         roomRef = ref;
         sessionStorage.setItem('osDuDestinPlayerId_' + roomId, myPlayerId);
@@ -410,6 +485,7 @@
       if(!snap.exists()){ showRoomError('Aucune partie trouvée avec ce code.'); return; }
       myPlayerId = generatePlayerId();
       ref.child('players/' + myPlayerId).set({ name, loadedDiceCount: 0, diceSet: 'commun' }).then(() => {
+        mode = 'multi';
         roomId = code;
         roomRef = ref;
         sessionStorage.setItem('osDuDestinPlayerId_' + roomId, myPlayerId);
@@ -425,8 +501,10 @@
   }
 
   $('leave-room-btn').addEventListener('click', () => {
-    if(roomRef && myPlayerId) roomRef.child('players/' + myPlayerId).remove();
-    if(roomId) sessionStorage.removeItem('osDuDestinPlayerId_' + roomId);
+    if(mode === 'multi'){
+      if(roomRef && myPlayerId) roomRef.child('players/' + myPlayerId).remove();
+      if(roomId) sessionStorage.removeItem('osDuDestinPlayerId_' + roomId);
+    }
     location.href = location.pathname;
   });
 
@@ -455,6 +533,7 @@
     ref.once('value').then(snap => {
       const val = snap.val();
       if(val && val.players && val.players[saved]){
+        mode = 'multi';
         roomId = code;
         myPlayerId = saved;
         roomRef = ref;
@@ -462,6 +541,40 @@
       }
     }).catch(() => {});
   })();
+
+  // ---------- Mode solo (une seule personne gere toute la table, hors-ligne) ----------
+  $('solo-mode-btn').addEventListener('click', () => {
+    mode = 'solo';
+    phase = 'setup';
+    players = [];
+    contenders = [];
+    statusMap = {};
+    diceState = {};
+    roundNumber = 1;
+    gameOver = false;
+    logEntries = [];
+    localRpTexts = {};
+    myPlayerId = null;
+    $('room-panel').classList.add('hidden');
+    renderAll();
+  });
+
+  $('solo-add-player-btn').addEventListener('click', () => {
+    const input = $('solo-player-name-input');
+    const name = input.value.trim();
+    if(!name) return;
+    const id = generatePlayerId();
+    const current = {};
+    players.forEach(p => { current[p.id] = { name: p.name, loadedDiceCount: p.loadedDiceCount, diceSet: p.diceSet }; });
+    current[id] = { name, loadedDiceCount: 0, diceSet: 'commun' };
+    pushField('players', current);
+    input.value = '';
+    input.focus();
+  });
+
+  $('solo-player-name-input').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter'){ $('solo-add-player-btn').click(); }
+  });
 
   // ---------- Applique l'état reçu de Firebase et redessine tout ----------
   function applySnapshot(val){
@@ -483,16 +596,20 @@
   }
 
   function renderAll(){
+    $('leave-room-btn').textContent = mode === 'solo' ? 'Retour à l\'accueil' : 'Quitter la partie';
     if(phase === 'setup'){
       $('setup-panel').classList.remove('hidden');
       $('game-panel').classList.add('hidden');
       $('log-panel').classList.add('hidden');
-      $('room-code-text').textContent = roomId;
+      $('room-code-bar').classList.toggle('hidden', mode !== 'multi');
+      $('solo-add-row').classList.toggle('hidden', mode !== 'solo');
+      if(mode === 'multi') $('room-code-text').textContent = roomId;
       renderSetup();
     } else {
       $('setup-panel').classList.add('hidden');
       $('game-panel').classList.remove('hidden');
       $('log-panel').classList.remove('hidden');
+      $('roll-round-btn').classList.toggle('hidden', mode !== 'solo');
       renderGame();
       renderLog();
     }
@@ -502,19 +619,22 @@
   function renderSetup(){
     const list = $('player-setup-list');
     if(players.length === 0){
-      list.innerHTML = '<div class="empty-hint">En attente de joueurs...</div>';
+      list.innerHTML = mode === 'solo'
+        ? '<div class="empty-hint">Ajoute au moins deux personnages pour commencer.</div>'
+        : '<div class="empty-hint">En attente de joueurs...</div>';
     } else {
       const setLabels = {commun: 'Set commun', luxe: 'Set de luxe', interdit: 'Set interdit'};
       list.innerHTML = players.map(p => {
-        const mine = p.id === myPlayerId;
-        const setControl = mine ? `
+        const mine = mode === 'multi' && p.id === myPlayerId;
+        const editable = mode === 'solo' || mine;
+        const setControl = editable ? `
             <select data-dice-set="${p.id}">
               <option value="commun" ${p.diceSet === 'commun' ? 'selected' : ''}>Set commun</option>
               <option value="luxe" ${p.diceSet === 'luxe' ? 'selected' : ''}>Set de luxe</option>
               <option value="interdit" ${p.diceSet === 'interdit' ? 'selected' : ''}>Set interdit</option>
             </select>`
           : `<span class="badge set-${p.diceSet}">${setLabels[p.diceSet]}</span>`;
-        const loadedControl = mine ? `
+        const loadedControl = editable ? `
             <select data-loaded-count="${p.id}">
               <option value="0" ${p.loadedDiceCount === 0 ? 'selected' : ''}>0</option>
               <option value="1" ${p.loadedDiceCount === 1 ? 'selected' : ''}>1</option>
@@ -522,11 +642,13 @@
               <option value="3" ${p.loadedDiceCount === 3 ? 'selected' : ''}>3</option>
             </select>`
           : (p.loadedDiceCount > 0 ? `<span class="badge loaded">${p.loadedDiceCount} dé(s) pipé(s)</span>` : '');
+        const removeBtn = mode === 'solo' ? `<button class="secondary small" data-remove="${p.id}">✕</button>` : '';
         return `
           <div class="player-setup-row ${mine ? 'mine' : ''}">
             <span class="name">${escapeHtml(p.name)}${mine ? ' <em>(toi)</em>' : ''}</span>
             <label class="check small">Set de dés : ${setControl}</label>
             <label class="check small">Dés pipés : ${loadedControl}</label>
+            ${removeBtn}
           </div>
         `;
       }).join('');
@@ -538,16 +660,25 @@
     const countSelect = e.target.closest('[data-loaded-count]');
     if(countSelect){
       const id = countSelect.getAttribute('data-loaded-count');
-      if(id !== myPlayerId) return;
-      roomRef.child('players/' + id + '/loadedDiceCount').set(Number(countSelect.value));
+      if(mode === 'multi' && id !== myPlayerId) return;
+      pushField('players/' + id + '/loadedDiceCount', Number(countSelect.value));
       return;
     }
     const setSelect = e.target.closest('[data-dice-set]');
     if(setSelect){
       const id = setSelect.getAttribute('data-dice-set');
-      if(id !== myPlayerId) return;
-      roomRef.child('players/' + id + '/diceSet').set(setSelect.value);
+      if(mode === 'multi' && id !== myPlayerId) return;
+      pushField('players/' + id + '/diceSet', setSelect.value);
     }
+  });
+
+  $('player-setup-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-remove]');
+    if(!btn || mode !== 'solo') return;
+    const id = btn.getAttribute('data-remove');
+    const current = {};
+    players.filter(p => p.id !== id).forEach(p => { current[p.id] = { name: p.name, loadedDiceCount: p.loadedDiceCount, diceSet: p.diceSet }; });
+    pushField('players', current);
   });
 
   function beginGame(){
@@ -556,7 +687,7 @@
     const newDiceState = {}; ids.forEach(id => newDiceState[id] = { dice: [], loadedFlags: [], rolled:false, rolling:false });
     const newContenders = {}; ids.forEach(id => newContenders[id] = true);
     localRpTexts = {};
-    roomRef.update({
+    pushUpdate({
       phase: 'playing',
       contenders: newContenders,
       statusMap: newStatusMap,
@@ -570,30 +701,63 @@
   $('replay-btn').addEventListener('click', beginGame);
 
   $('back-setup-btn').addEventListener('click', () => {
-    roomRef.child('phase').set('setup');
+    pushField('phase', 'setup');
   });
 
-  // ---------- Rolling (chacun lance ses propres dés) ----------
+  // ---------- Rolling (multi : chacun lance ses propres dés) ----------
   function rollMyDice(id){
     const player = playerById(id);
     if(!player) return;
     const diceSfx = $('dice-sfx');
     diceSfx.currentTime = 0;
     diceSfx.play().catch(() => {});
-    roomRef.child('diceState/' + id).update({ rolling: true, dice: [1,1,1], loadedFlags: [] });
+    pushMerge('diceState/' + id, { rolling: true, dice: [1,1,1], loadedFlags: [] });
 
     let ticks = 0;
     const interval = setInterval(() => {
       const { dice, flags } = rollThree(player.loadedDiceCount);
-      roomRef.child('diceState/' + id).update({ dice, loadedFlags: flags });
+      pushMerge('diceState/' + id, { dice, loadedFlags: flags });
       ticks++;
       if(ticks >= 7){
         clearInterval(interval);
         const final = rollThree(player.loadedDiceCount);
-        roomRef.child('diceState/' + id).update({ dice: final.dice, loadedFlags: final.flags, rolled: true, rolling: false });
+        pushMerge('diceState/' + id, { dice: final.dice, loadedFlags: final.flags, rolled: true, rolling: false });
       }
     }, 90);
   }
+
+  // ---------- Rolling (solo : on lance pour toute la table d'un coup) ----------
+  function rollAllDice(){
+    $('roll-round-btn').disabled = true;
+    const diceSfx = $('dice-sfx');
+    diceSfx.currentTime = 0;
+    diceSfx.play().catch(() => {});
+
+    const startUpdates = {};
+    contenders.forEach(id => { startUpdates['diceState/' + id] = { dice: [1,1,1], loadedFlags: [], rolled:false, rolling:true }; });
+    pushUpdate(startUpdates);
+
+    let ticks = 0;
+    const interval = setInterval(() => {
+      const tickUpdates = {};
+      contenders.forEach(id => {
+        const { dice, flags } = rollThree(playerById(id).loadedDiceCount);
+        tickUpdates['diceState/' + id] = { dice, loadedFlags: flags, rolled:false, rolling:true };
+      });
+      pushUpdate(tickUpdates);
+      ticks++;
+      if(ticks >= 7){
+        clearInterval(interval);
+        const finalUpdates = {};
+        contenders.forEach(id => {
+          const final = rollThree(playerById(id).loadedDiceCount);
+          finalUpdates['diceState/' + id] = { dice: final.dice, loadedFlags: final.flags, rolled:true, rolling:false };
+        });
+        pushUpdate(finalUpdates);
+      }
+    }, 90);
+  }
+  $('roll-round-btn').addEventListener('click', rollAllDice);
 
   // ---------- Resolution ----------
   $('resolve-round-btn').addEventListener('click', resolveRound);
@@ -607,7 +771,7 @@
       log.push({ text: `Aucune somme paire ce tour-ci — le sort hésite encore. On relance les dés pour tout le monde.`, type: 'warn' });
       contenders.forEach(id => { updates['diceState/' + id] = { dice: [], loadedFlags: [], rolled:false, rolling:false }; });
       updates['logEntries'] = log;
-      roomRef.update(updates);
+      pushUpdate(updates);
       return;
     }
 
@@ -653,7 +817,7 @@
     const names = atMaxSix.map(id => playerById(id).name).join(' et ');
     log.push({ text: `Égalité parfaite (${maxTotal}, ${maxSix} six) entre ${names} ! Manche de départage n°${roundNumber + 1}.`, type: 'warn' });
     updates['logEntries'] = log;
-    roomRef.update(updates);
+    pushUpdate(updates);
   }
 
   function finalizeWinner(id, updates, log){
@@ -663,7 +827,7 @@
     const ds = diceState[id];
     log.push({ text: `${p.name} remporte Les Os du Destin avec ${sum(ds.dice)} (${describeDiceGrouped(ds.dice)}) !`, type: 'win' });
     updates['logEntries'] = log;
-    roomRef.update(updates);
+    pushUpdate(updates);
     recordHistory({
       time: new Date().toLocaleString('fr-FR', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}),
       winner: p.name,
@@ -790,7 +954,7 @@
       const ds = diceState[id] || { dice: [], loadedFlags: [], rolled:false, rolling:false };
       const eliminated = statusMap[id] && !['active', 'winner', 'tied'].includes(statusMap[id]);
       const isWinner = statusMap[id] === 'winner';
-      const mine = id === myPlayerId;
+      const mine = mode === 'multi' && id === myPlayerId;
       const total = ds.dice.length === 3 ? sum(ds.dice) : null;
       const parity = total !== null ? (isEven(total) ? '<span class="parity even">(pair)</span>' : '<span class="parity odd">(impair)</span>') : '';
 
@@ -845,6 +1009,10 @@
 
     const allRolled = contenders.length > 0 && contenders.every(id => diceState[id] && diceState[id].rolled);
     $('resolve-round-btn').disabled = gameOver || !allRolled;
+    if(mode === 'solo'){
+      const anyRolling = contenders.some(id => diceState[id] && diceState[id].rolling);
+      $('roll-round-btn').disabled = gameOver || anyRolling || allRolled;
+    }
 
     if(!animating) attachCardHandlers();
   }
