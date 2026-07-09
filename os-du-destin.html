@@ -325,6 +325,7 @@
   let statusMap = {};         // id -> 'active' | 'tied' | 'out-odd' | 'out-lower' | 'out-six' | 'winner'
   let diceState = {};         // id -> {dice:[], loadedFlags:[], rolled:false, rolling:false}
   let roundNumber = 1;
+  let retryCount = 0;         // nombre de relances sans somme paire, pour la manche en cours
   let gameOver = false;
   let logEntries = [];
   let localRpTexts = {};      // id -> texte RP généré (purement local, jamais synchronisé)
@@ -372,6 +373,7 @@
   function applyTopLevel(key, value){
     if(key === 'phase') phase = value;
     else if(key === 'roundNumber') roundNumber = value;
+    else if(key === 'retryCount') retryCount = value || 0;
     else if(key === 'gameOver') gameOver = !!value;
     else if(key === 'logEntries') logEntries = Array.isArray(value) ? value : [];
     else if(key === 'contenders') contenders = value ? Object.keys(value) : [];
@@ -590,6 +592,7 @@
       if(!diceState[id].loadedFlags) diceState[id].loadedFlags = [];
     });
     roundNumber = val.roundNumber || 1;
+    retryCount = val.retryCount || 0;
     gameOver = !!val.gameOver;
     logEntries = Array.isArray(val.logEntries) ? val.logEntries : [];
     renderAll();
@@ -693,6 +696,7 @@
       statusMap: newStatusMap,
       diceState: newDiceState,
       roundNumber: 1,
+      retryCount: 0,
       gameOver: false,
       logEntries: [{ text: `La partie commence autour de la table, ${players.length} joueurs osent tenter leur chance.`, type: 'info' }]
     });
@@ -768,8 +772,10 @@
     const evens = contenders.filter(id => isEven(sum(diceState[id].dice)));
 
     if(evens.length === 0){
-      log.push({ text: `Aucune somme paire ce tour-ci — le sort hésite encore. On relance les dés pour tout le monde.`, type: 'warn' });
+      const attempt = retryCount + 1;
+      log.push({ text: `Aucune somme paire ce tour-ci (relance n°${attempt}) — le sort hésite encore. On relance les dés pour tout le monde.`, type: 'warn' });
       contenders.forEach(id => { updates['diceState/' + id] = { dice: [], loadedFlags: [], rolled:false, rolling:false }; });
+      updates['retryCount'] = attempt;
       updates['logEntries'] = log;
       pushUpdate(updates);
       return;
@@ -814,6 +820,7 @@
     });
     updates['contenders'] = newContenders;
     updates['roundNumber'] = roundNumber + 1;
+    updates['retryCount'] = 0;
     const names = atMaxSix.map(id => playerById(id).name).join(' et ');
     log.push({ text: `Égalité parfaite (${maxTotal}, ${maxSix} six) entre ${names} ! Manche de départage n°${roundNumber + 1}.`, type: 'warn' });
     updates['logEntries'] = log;
@@ -946,7 +953,9 @@
   }
 
   function renderGame(animating){
-    $('round-title').textContent = roundNumber === 1 ? 'Manche 1' : `Manche de départage n°${roundNumber}`;
+    let roundTitle = roundNumber === 1 ? 'Manche 1' : `Manche de départage n°${roundNumber}`;
+    if(retryCount > 0) roundTitle += ` — relance n°${retryCount} (aucun total pair)`;
+    $('round-title').textContent = roundTitle;
 
     $('players-grid').innerHTML = contenders.map(id => {
       const p = playerById(id);
