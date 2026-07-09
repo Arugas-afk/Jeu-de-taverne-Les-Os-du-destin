@@ -227,8 +227,10 @@
         <input type="range" id="volume-slider" min="0" max="100" value="70">
       </label>
     </div>
-    <audio id="bg-music" src="musique_les_os_du_destin.mp3" loop preload="auto"></audio>
-    <audio id="dice-sfx" src="jet_dés.mp3" preload="auto"></audio>
+    <audio id="bg-music" src="son/musique_les_os_du_destin.mp3" loop preload="auto"></audio>
+    <audio id="dice-sfx" src="son/jet_dés.mp3" preload="auto"></audio>
+    <audio id="join-sfx" src="son/rejoins_partie.mp3" preload="auto"></audio>
+    <audio id="win-sfx" src="son/win.mp3" preload="auto"></audio>
   </header>
 
   <!-- ROOM -->
@@ -329,6 +331,8 @@
   let logEntries = [];
   let localRpTexts = {};      // id -> texte RP généré (purement local, jamais synchronisé)
   let gameHistory = [];       // {time, winner, total, sixes, players, rounds} — local par navigateur
+  let knownPlayerIds = null;  // pour detecter les nouveaux arrivants (son de connexion)
+  let previousGameOver = false; // pour detecter la transition vers une victoire (son de victoire)
 
   const numberWords = {1:'un',2:'deux',3:'trois',4:'quatre',5:'cinq',6:'six'};
   // Dés pipés : biaisés vers les faces paires (et le 6 en particulier).
@@ -596,6 +600,17 @@
   }
 
   function renderAll(){
+    const currentIds = players.map(p => p.id);
+    if(knownPlayerIds === null){
+      knownPlayerIds = new Set(currentIds);
+    } else {
+      const added = currentIds.filter(id => !knownPlayerIds.has(id));
+      if(added.length > 0) playJoinSound();
+      knownPlayerIds = new Set(currentIds);
+    }
+    if(gameOver && !previousGameOver) playWinSound();
+    previousGameOver = gameOver;
+
     $('leave-room-btn').textContent = mode === 'solo' ? 'Retour à l\'accueil' : 'Quitter la partie';
     if(phase === 'setup'){
       $('setup-panel').classList.remove('hidden');
@@ -1041,8 +1056,20 @@
   // ---------- Musique ----------
   const bgMusic = $('bg-music');
   const diceSfxEl = $('dice-sfx');
+  const joinSfxEl = $('join-sfx');
+  const winSfxEl = $('win-sfx');
   let musicOn = false;
   let masterVolume = 0.7;
+
+  function playJoinSound(){
+    joinSfxEl.currentTime = 0;
+    joinSfxEl.play().catch(() => {});
+  }
+
+  function playWinSound(){
+    winSfxEl.currentTime = 0;
+    winSfxEl.play().catch(() => {});
+  }
 
   function loadVolume(){
     try{
@@ -1054,6 +1081,8 @@
   function applyVolume(){
     bgMusic.volume = masterVolume;
     diceSfxEl.volume = masterVolume;
+    joinSfxEl.volume = masterVolume;
+    winSfxEl.volume = masterVolume;
     $('volume-slider').value = Math.round(masterVolume * 100);
   }
 
@@ -1061,6 +1090,8 @@
     masterVolume = Number(e.target.value) / 100;
     bgMusic.volume = masterVolume;
     diceSfxEl.volume = masterVolume;
+    joinSfxEl.volume = masterVolume;
+    winSfxEl.volume = masterVolume;
     try{ localStorage.setItem('osDuDestinVolume', String(masterVolume)); } catch(e){}
   });
 
