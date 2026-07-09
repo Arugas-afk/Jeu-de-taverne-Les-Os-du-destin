@@ -582,7 +582,7 @@
     }
     el.innerHTML = gameHistory.map(g => `
       <div class="log-entry win">
-        <img class="icon-crown" src="Image/couronne_os.png" alt=""> ${escapeHtml(g.winner)} — total ${g.total} (${g.sixes} six) — ${g.players} joueurs, ${g.rounds} manche(s) — ${escapeHtml(g.time)}
+        <img class="icon-crown" src="assets/images/couronne_os.png" alt=""> ${escapeHtml(g.winner)} — total ${g.total} (${g.sixes} six) — ${g.players} joueurs, ${g.rounds} manche(s) — ${escapeHtml(g.time)}
       </div>
     `).join('');
   }
@@ -654,7 +654,7 @@
   // ---------- Render (jeu) ----------
   function statusBadge(id){
     const s = statusMap[id];
-    if(s === 'winner') return '<span class="badge win"><img class="icon-crown" src="Image/couronne_os.png" alt=""> Vainqueur</span>';
+    if(s === 'winner') return '<span class="badge win"><img class="icon-crown" src="assets/images/couronne_os.png" alt=""> Vainqueur</span>';
     if(s === 'tied') return '<span class="badge tied">Égalité — départage</span>';
     if(s === 'out-odd') return '<span class="badge out">Éliminé — impair</span>';
     if(s === 'out-lower') return '<span class="badge out">Éliminé — somme faible</span>';
@@ -684,7 +684,7 @@
           return `<div class="${cls.join(' ')}">?</div>`;
         }
         const variant = ds.loadedFlags[i] ? `pipes-${p.diceSet}` : p.diceSet;
-        const src = `Image/des/les-os-du-destin/os-destin-${variant}-face-${v}.png`;
+        const src = `assets/images/des/les-os-du-destin/os-destin-${variant}-face-${v}.png`;
         return `<div class="${cls.join(' ')}"><img src="${src}" alt="Face ${v}"></div>`;
       }).join('');
 
@@ -749,7 +749,7 @@
 
   function renderLog(){
     const log = $('log');
-    const crown = '<img class="icon-crown" src="Image/couronne_os.png" alt=""> ';
+    const crown = '<img class="icon-crown" src="assets/images/couronne_os.png" alt=""> ';
     log.innerHTML = logEntries.map(e => `<div class="log-entry ${e.type}">${e.type === 'win' ? crown : ''}${escapeHtml(e.text)}</div>`).join('');
     log.scrollTop = log.scrollHeight;
   }

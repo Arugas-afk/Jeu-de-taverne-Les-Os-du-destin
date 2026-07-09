@@ -14,6 +14,7 @@ Jeu de taverne pour le serveur JDR dark fantasy Luxcyros.
 
 ## Contenu
 
-- `os-du-destin.html` — le jeu (ouvrir directement dans un navigateur, ou utiliser le lien ci-dessus)
-- `Image/` — logo, couronne et faces de dés (sets commun / luxe / interdit)
-- `musique_les_os_du_destin.mp3`, `jet_dés.mp3` — ambiance sonore
+- `os-du-destin.html` — la structure de la page (ouvrir directement dans un navigateur, ou utiliser le lien ci-dessus)
+- `style.css`, `script.js` — le style et la logique du jeu
+- `assets/images/` — logo, couronne et faces de dés (sets commun / luxe / interdit)
+- `assets/sounds/` — musique et effets sonores
