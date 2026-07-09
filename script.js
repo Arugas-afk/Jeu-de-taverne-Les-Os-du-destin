@@ -323,6 +323,9 @@
       $('game-panel').classList.remove('hidden');
       $('log-panel').classList.remove('hidden');
       $('roll-round-btn').classList.toggle('hidden', mode !== 'solo');
+      // "Relancer" ne doit apparaitre qu'une fois la partie gagnee, pour eviter
+      // qu'un joueur reinitialise les des en cours de manche et relance a l'infini.
+      $('replay-btn').classList.toggle('hidden', !gameOver);
       renderGame();
       renderLog();
     }
