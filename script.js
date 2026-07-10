@@ -36,6 +36,15 @@
   // Dés pipés : biaisés vers les faces paires (et le 6 en particulier).
   const LOADED_TABLE = [1,2,2,3,4,4,5,6,6,6];
   const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const ROOM_TTL_MS = 48 * 60 * 60 * 1000; // duree de vie d'une partie : 48h
+
+  // Identite du joueur, memorisee par navigateur et par partie (pour ne pas creer
+  // un doublon a chaque fois qu'on revient sur le meme lien).
+  const idKey = (code) => 'osDuDestinPlayerId_' + code;
+  const savedPlayerId = (code) => { try { return localStorage.getItem(idKey(code)); } catch(e){ return null; } };
+  const rememberPlayerId = (code, id) => { try { localStorage.setItem(idKey(code), id); } catch(e){} };
+  const forgetPlayerId = (code) => { try { localStorage.removeItem(idKey(code)); } catch(e){} };
+  const isRoomExpired = (val) => val && val.createdAt && (Date.now() - val.createdAt > ROOM_TTL_MS);
 
   // ---------- Helpers ----------
   const $ = (id) => document.getElementById(id);
@@ -166,7 +175,7 @@
         mode = 'multi';
         roomId = code;
         roomRef = ref;
-        sessionStorage.setItem('osDuDestinPlayerId_' + roomId, myPlayerId);
+        rememberPlayerId(roomId, myPlayerId);
         history.replaceState(null, '', location.pathname + '?room=' + roomId);
         attachRoomListener();
       });
@@ -185,14 +194,46 @@
     const ref = db.ref('rooms/' + code);
     ref.once('value').then(snap => {
       if(!snap.exists()){ showRoomError('Aucune partie trouvée avec ce code.'); return; }
-      myPlayerId = generatePlayerId();
-      ref.child('players/' + myPlayerId).set({ name, loadedDiceCount: 0, diceSet: 'commun' }).then(() => {
+      const val = snap.val();
+
+      // Partie trop vieille : on la supprime et on refuse d'y entrer.
+      if(isRoomExpired(val)){
+        ref.remove();
+        forgetPlayerId(code);
+        showRoomError('Cette partie a expiré (plus de 48h). Crée une nouvelle partie.');
+        return;
+      }
+
+      const enterExisting = (id) => {
         mode = 'multi';
         roomId = code;
+        myPlayerId = id;
         roomRef = ref;
-        sessionStorage.setItem('osDuDestinPlayerId_' + roomId, myPlayerId);
+        rememberPlayerId(code, id);
         history.replaceState(null, '', location.pathname + '?room=' + roomId);
         attachRoomListener();
+      };
+
+      // Si ce navigateur a deja une identite dans cette partie, on la reprend
+      // (au lieu de creer un doublon) et on met juste le nom a jour.
+      const saved = savedPlayerId(code);
+      if(saved && val.players && val.players[saved]){
+        ref.child('players/' + saved + '/name').set(name);
+        enterExisting(saved);
+        return;
+      }
+
+      // Refuser un pseudo deja pris par un autre joueur de la partie.
+      const nameTaken = val.players && Object.keys(val.players).some(pid =>
+        (val.players[pid].name || '').trim().toLowerCase() === name.trim().toLowerCase());
+      if(nameTaken){
+        showRoomError('Ce nom est déjà pris dans cette partie. Choisis-en un autre.');
+        return;
+      }
+
+      myPlayerId = generatePlayerId();
+      ref.child('players/' + myPlayerId).set({ name, loadedDiceCount: 0, diceSet: 'commun' }).then(() => {
+        enterExisting(myPlayerId);
       });
     }).catch(() => showRoomError("Connexion à Firebase impossible. Vérifie ta connexion."));
   }
@@ -203,11 +244,20 @@
   }
 
   $('leave-room-btn').addEventListener('click', () => {
-    if(mode === 'multi'){
-      if(roomRef && myPlayerId) roomRef.child('players/' + myPlayerId).remove();
-      if(roomId) sessionStorage.removeItem('osDuDestinPlayerId_' + roomId);
+    if(mode === 'multi' && roomRef && myPlayerId){
+      const ref = roomRef;
+      const meId = myPlayerId;
+      if(roomId) forgetPlayerId(roomId);
+      // Retire le joueur, puis supprime la partie s'il ne reste plus personne.
+      ref.child('players/' + meId).remove().then(() => {
+        ref.child('players').once('value').then(snap => {
+          if(!snap.exists()) ref.remove();
+          location.href = location.pathname;
+        });
+      }).catch(() => { location.href = location.pathname; });
+    } else {
+      location.href = location.pathname;
     }
-    location.href = location.pathname;
   });
 
   $('copy-invite-btn').addEventListener('click', () => {
@@ -229,11 +279,12 @@
     if(!urlRoom) return;
     const code = urlRoom.toUpperCase();
     $('join-room-input').value = code;
-    const saved = sessionStorage.getItem('osDuDestinPlayerId_' + code);
+    const saved = savedPlayerId(code);
     if(!saved) return;
     const ref = db.ref('rooms/' + code);
     ref.once('value').then(snap => {
       const val = snap.val();
+      if(isRoomExpired(val)){ ref.remove(); forgetPlayerId(code); return; }
       if(val && val.players && val.players[saved]){
         mode = 'multi';
         roomId = code;
